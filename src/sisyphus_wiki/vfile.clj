@@ -9,18 +9,19 @@
   (root [this]))
 
 (defprotocol VFile
+  (basename [this])
   (directory? [this])
   (children [this])
   (child [this name]))
 
 (deftype GitFile [repo object-id name]
   VFile
-  (directory? [this] false)
-  (children [this]
-    (throw (UnsupportedOperationException. "Not a directory."))))
+  (basename [this] name)
+  (directory? [this] false))
 
 (deftype GitDirectory [repo object-id name]
   VFile
+  (basename [this] name)
   (directory? [this] true)
   (children [this]
     (if (nil? object-id)

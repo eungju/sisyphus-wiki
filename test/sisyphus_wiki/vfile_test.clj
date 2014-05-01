@@ -44,7 +44,7 @@
 
   (fact "root directory is always exist."
     (directory? (root dut)) => true
-    (.name (root dut)) => nil
+    (basename (root dut)) => nil
     (children (root dut)) => []
     (child (root dut) "not-exist") => nil)
 
@@ -52,7 +52,7 @@
     (dorun (map #(.createNewFile (File. dir %)) ["file1", "file2"]))
     (-> git (.add) (.addFilepattern ".") (.call))
     (-> git (.commit) (.setMessage "first commit.") (.call))
-    (map #(.name %) (children (root dut))) => ["file1", "file2"]
+    (map basename (children (root dut))) => ["file1", "file2"]
     (every? #(not (directory? %)) (children (root dut))) => true)
 
   (fact "a directory can contain directories."
@@ -60,5 +60,5 @@
     (.createNewFile (File. dir "dir1/file1"))
     (-> git (.add) (.addFilepattern ".") (.call))
     (-> git (.commit) (.setMessage "first commit.") (.call))
-    (every? #(directory? %) (children (root dut))) => true
-    (map #(.name %) (children (child (root dut) "dir1"))) => ["file1"]))
+    (every? directory? (children (root dut))) => true
+    (map basename (children (child (root dut) "dir1"))) => ["file1"]))
