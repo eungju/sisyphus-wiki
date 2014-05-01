@@ -43,22 +43,30 @@
                  git (.git dut)] ?form (close dut)))]
 
   (fact "root directory is always exist."
-    (directory? (root dut)) => true
-    (basename (root dut)) => nil
-    (children (root dut)) => []
-    (child (root dut) "not-exist") => nil)
+    (let [root-dir (root dut)]
+      (directory? root-dir) => true
+      (parent root-dir) => nil
+      (basename root-dir) => nil
+      (children root-dir) => []
+      (child root-dir "not-exist") => nil))
 
   (fact "a directory can contain files."
     (dorun (map #(.createNewFile (File. dir %)) ["file1", "file2"]))
     (-> git (.add) (.addFilepattern ".") (.call))
     (-> git (.commit) (.setMessage "first commit.") (.call))
-    (map basename (children (root dut))) => ["file1", "file2"]
-    (every? #(not (directory? %)) (children (root dut))) => true)
+    (let [root-dir (root dut)]
+      (map basename (children root-dir)) => ["file1", "file2"]
+      (every? #(not (directory? %)) (children root-dir)) => true
+      (map parent (children root-dir)) => [root-dir root-dir]))
 
   (fact "a directory can contain directories."
     (.mkdir (File. dir "dir1"))
     (.createNewFile (File. dir "dir1/file1"))
     (-> git (.add) (.addFilepattern ".") (.call))
     (-> git (.commit) (.setMessage "first commit.") (.call))
-    (every? directory? (children (root dut))) => true
-    (map basename (children (child (root dut) "dir1"))) => ["file1"]))
+    (let [root-dir (root dut)
+          dir1 (child root-dir "dir1")]
+      (every? directory? (children root-dir)) => true
+      (map basename (children dir1)) => ["file1"]
+      (map parent (children dir1)) => [dir1]))
+)

@@ -9,18 +9,21 @@
   (root [this]))
 
 (defprotocol VFile
+  (parent [this])
   (basename [this])
   (directory? [this])
   (children [this])
   (child [this name]))
 
-(deftype GitFile [repo object-id name]
+(deftype GitFile [repo parent object-id name]
   VFile
+  (parent [this] parent)
   (basename [this] name)
   (directory? [this] false))
 
-(deftype GitDirectory [repo object-id name]
+(deftype GitDirectory [repo parent object-id name]
   VFile
+  (parent [this] parent)
   (basename [this] name)
   (directory? [this] true)
   (children [this]
@@ -35,8 +38,8 @@
                    child-name (.getNameString walk)]
                (recur (conj acc
                             (if (.isSubtree walk)
-                              (GitDirectory. repo child-id child-name)
-                              (GitFile. repo child-id child-name)))))
+                              (GitDirectory. repo this child-id child-name)
+                              (GitFile. repo this child-id child-name)))))
              acc)) []))))
   (child [this name]
     (first (drop-while #(not= (.name %) name) (children this)))))
@@ -50,7 +53,7 @@
           root-id (if head-id (-> (RevWalk. repo)
                                   (.parseCommit head-id)
                                   (.getTree)))]
-      (GitDirectory. repo root-id nil))))
+      (GitDirectory. repo nil root-id nil))))
 
 (defn git-store [dir &{:keys [init] :or {init false}}]
   (GitStore.
