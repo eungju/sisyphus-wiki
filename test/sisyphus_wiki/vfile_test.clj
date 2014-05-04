@@ -42,7 +42,7 @@
                  dut (git-store dir :init true)
                  git (.git dut)] ?form (close dut)))]
 
-  (fact "root directory is always exist."
+  (fact "the root is always exist."
     (let [root-dir (root dut)]
       (directory? root-dir) => true
       (parent root-dir) => nil
@@ -50,7 +50,7 @@
       (children root-dir) => []
       (child root-dir "not-exist") => nil))
 
-  (fact "a directory can contain files."
+  (fact "a directory can contain regular files."
     (dorun (map #(.createNewFile (File. dir %)) ["file1", "file2"]))
     (-> git (.add) (.addFilepattern ".") (.call))
     (-> git (.commit) (.setMessage "first commit.") (.call))
@@ -69,4 +69,13 @@
       (every? directory? (children root-dir)) => true
       (map basename (children dir1)) => ["file1"]
       (map parent (children dir1)) => [dir1]))
+
+  (fact "the root contains all committed files."
+    (dorun (map #(.createNewFile (File. dir %)) ["file1", "file2"]))
+    (-> git (.add) (.addFilepattern "file1") (.call))
+    (-> git (.commit) (.setMessage "first commit.") (.call))
+    (-> git (.add) (.addFilepattern "file2") (.call))
+    (-> git (.commit) (.setMessage "second commit.") (.call))
+    (let [root-dir (root dut)]
+      (map basename (children root-dir)) => ["file1", "file2"]))
 )
