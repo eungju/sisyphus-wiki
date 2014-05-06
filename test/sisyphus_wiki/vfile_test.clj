@@ -1,5 +1,6 @@
 (ns sisyphus-wiki.vfile-test
-  (:use midje.sweet)
+  (:use midje.sweet
+        clojure.java.io)
   (:require [sisyphus-wiki.vfile :refer :all])
   (:import [java.io File]
            [org.eclipse.jgit.errors RepositoryNotFoundException]
@@ -36,6 +37,18 @@
     => (checker [actual] (instance? GitStore actual)))
 )
 
+(defn- create-file [f content]
+  (with-open [w (writer f)]
+    (.write w content)))
+
+(defn- modify-file [f content]
+  (with-open [w (writer f)]
+    (.write w content)))
+
+(defn- git-commit [git pattern message]
+  (-> git (.add) (.addFilepattern pattern) (.call))
+  (-> git (.commit) (.setMessage message) (.call)))
+
 (against-background
   [(around
     :facts (let [dir (doto (File/createTempFile "test-" "-git") (.delete) (.mkdir))
@@ -47,35 +60,67 @@
       (directory? root-dir) => true
       (parent root-dir) => nil
       (basename root-dir) => nil
+      (pathname root-dir) => ""
       (children root-dir) => []
       (child root-dir "not-exist") => nil))
 
   (fact "a directory can contain regular files."
-    (dorun (map #(.createNewFile (File. dir %)) ["file1", "file2"]))
-    (-> git (.add) (.addFilepattern ".") (.call))
-    (-> git (.commit) (.setMessage "first commit.") (.call))
+    (dorun (map #(.createNewFile (file dir %)) ["file1", "file2"]))
+    (git-commit git "." "first commit.")
     (let [root-dir (root dut)]
       (map basename (children root-dir)) => ["file1", "file2"]
+      (map pathname (children root-dir)) => ["file1", "file2"]
       (every? #(not (directory? %)) (children root-dir)) => true
       (map parent (children root-dir)) => [root-dir root-dir]))
 
   (fact "a directory can contain directories."
-    (.mkdir (File. dir "dir1"))
-    (.createNewFile (File. dir "dir1/file1"))
-    (-> git (.add) (.addFilepattern ".") (.call))
-    (-> git (.commit) (.setMessage "first commit.") (.call))
+    (.mkdir (file dir "dir1"))
+    (.createNewFile (file dir "dir1/file1"))
+    (git-commit git "." "first commit.")
     (let [root-dir (root dut)
           dir1 (child root-dir "dir1")]
       (every? directory? (children root-dir)) => true
       (map basename (children dir1)) => ["file1"]
+      (map pathname (children dir1)) => ["dir1/file1"]
       (map parent (children dir1)) => [dir1]))
 
   (fact "the root contains all committed files."
-    (dorun (map #(.createNewFile (File. dir %)) ["file1", "file2"]))
-    (-> git (.add) (.addFilepattern "file1") (.call))
-    (-> git (.commit) (.setMessage "first commit.") (.call))
-    (-> git (.add) (.addFilepattern "file2") (.call))
-    (-> git (.commit) (.setMessage "second commit.") (.call))
+    (dorun (map #(.createNewFile (file dir %)) ["file1", "file2"]))
+    (git-commit git "file1" "first commit.")
+    (git-commit git "file2" "second commit.")
     (let [root-dir (root dut)]
       (map basename (children root-dir)) => ["file1", "file2"]))
 )
+
+(facts "about change sets."
+  (against-background
+    [(around
+      :facts (let [dir (doto (File/createTempFile "test-" "-git")
+                         (.delete)
+                         (.mkdir))
+                   dut (git-store dir :init true)
+                   git (.git dut)] ?form (close dut)))]
+
+    (fact "There can be no change set."
+      (empty? (change-sets (root dut))) => true)
+
+    (fact "Change sets of a directory contains all changes of the directory and the children."
+      (let [file1 (file dir "file1")
+            file2 (file dir "file2")]
+        (create-file file1 "body1")
+        (git-commit git "file1" "first.")
+        (create-file file2 "body2")
+        (git-commit git "file2" "second.")
+        (map message (change-sets (root dut))) => ["second.", "first."]))
+
+    (fact "Change sets of a regular file contains all changes of the file."
+      (let [file1 (file dir "file1")
+            file2 (file dir "file2")]
+        (create-file file1 "body1")
+        (git-commit git "file1" "first.")
+        (create-file file2 "body2")
+        (git-commit git "file2" "second.")
+        (modify-file file1 "body changed.")
+        (git-commit git "file1" "third.")
+        (map message (change-sets (child (root dut) "file1"))) => ["third.", "first."]
+))))

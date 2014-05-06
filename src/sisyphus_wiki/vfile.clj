@@ -2,7 +2,8 @@
   (:import [org.eclipse.jgit.api Git]
            [org.eclipse.jgit.lib Constants FileMode]
            [org.eclipse.jgit.revwalk RevWalk]
-           [org.eclipse.jgit.treewalk TreeWalk]))
+           [org.eclipse.jgit.treewalk TreeWalk]
+           [org.eclipse.jgit.treewalk.filter TreeFilter PathFilter AndTreeFilter]))
 
 (defprotocol VFileStore
   (close [this])
@@ -11,20 +12,49 @@
 (defprotocol VFile
   (parent [this])
   (basename [this])
+  (pathname [this])
   (directory? [this])
   (children [this])
-  (child [this name]))
+  (child [this name])
+  (change-sets [this]))
+
+(defprotocol VChangeSet
+  (revision [this])
+  (message [this]))
+
+(deftype GitChangeSet [repo object-id message]
+  VChangeSet
+  (revision [this] (.name object-id))
+  (message[this] message))
+
+(defn- git-change-sets [node repo object-id]
+  (if (nil? object-id)
+    []
+    (let [head-id (.resolve repo Constants/HEAD)
+          walk (RevWalk. repo)]
+      (if-not (nil? (parent node))
+        (.setTreeFilter walk (AndTreeFilter/create (PathFilter/create (pathname node)) TreeFilter/ANY_DIFF)))
+      (.markStart walk (.parseCommit walk head-id))
+      (map #(GitChangeSet. repo (.getId %) (.getFullMessage %)) (iterator-seq (.iterator walk))))))
 
 (deftype GitFile [repo parent object-id name]
   VFile
   (parent [this] parent)
   (basename [this] name)
-  (directory? [this] false))
+  (pathname [this] (if (nil? (basename parent))
+                     name
+                     (str (pathname parent) "/" name)))
+  (directory? [this] false)
+  (change-sets [this] (git-change-sets this repo object-id)))
 
 (deftype GitDirectory [repo parent object-id name]
   VFile
   (parent [this] parent)
   (basename [this] name)
+  (pathname [this] (cond
+                    (nil? parent) ""
+                    (nil? (basename parent)) name
+                    true (str (pathname parent) "/" name)))
   (directory? [this] true)
   (children [this]
     (if (nil? object-id)
@@ -42,7 +72,8 @@
                               (GitFile. repo this child-id child-name)))))
              acc)) []))))
   (child [this name]
-    (first (drop-while #(not= (.name %) name) (children this)))))
+    (first (drop-while #(not= (.name %) name) (children this))))
+  (change-sets [this] (git-change-sets this repo object-id)))
 
 (deftype GitStore [git]
   VFileStore
