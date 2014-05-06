@@ -1,6 +1,7 @@
 (ns sisyphus-wiki.vfile
+  (:use clojure.java.io)
   (:import [org.eclipse.jgit.api Git]
-           [org.eclipse.jgit.lib Constants FileMode]
+           [org.eclipse.jgit.lib Constants]
            [org.eclipse.jgit.revwalk RevWalk]
            [org.eclipse.jgit.treewalk TreeWalk]
            [org.eclipse.jgit.treewalk.filter TreeFilter PathFilter AndTreeFilter]))
@@ -80,12 +81,11 @@
     (first (drop-while #(not= (.name %) name) (children this))))
   (change-sets [this] (git-change-sets this repo object-id)))
 
-(deftype GitStore [git]
+(deftype GitStore [repo git]
   VFileStore
-  (close [this] (.close git))
+  (close [this] (.close repo))
   (root [this]
-    (let [repo (.getRepository git)
-          head-id (.resolve repo Constants/HEAD)
+    (let [head-id (.resolve repo Constants/HEAD)
           walk (RevWalk. repo)]
       (try
         (GitDirectory. repo
@@ -96,11 +96,9 @@
         (finally (.dispose walk))))))
 
 (defn git-store [dir &{:keys [init] :or {init false}}]
-  (GitStore.
-   (if (and init
-            (or (and (.isDirectory dir) (.listFiles dir))
-                (not (.exists dir))))
-     (.call (doto (Git/init)
-              (.setDirectory (doto dir (.mkdirs)))
-              (.setBare false)))
-     (Git/open dir))))
+  (let [git (if (and init
+                     (or (and (.isDirectory dir) (.listFiles dir))
+                         (not (.exists dir))))
+              (-> (Git/init) (.setBare false) (.setDirectory dir) (.call))
+              (Git/open dir))]
+    (GitStore. (.getRepository git) git)))
