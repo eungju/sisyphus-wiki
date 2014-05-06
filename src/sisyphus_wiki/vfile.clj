@@ -32,10 +32,12 @@
     []
     (let [head-id (.resolve repo Constants/HEAD)
           walk (RevWalk. repo)]
-      (if-not (nil? (parent node))
-        (.setTreeFilter walk (AndTreeFilter/create (PathFilter/create (pathname node)) TreeFilter/ANY_DIFF)))
-      (.markStart walk (.parseCommit walk head-id))
-      (map #(GitChangeSet. repo (.getId %) (.getFullMessage %)) (iterator-seq (.iterator walk))))))
+      (try
+        (if-not (nil? (parent node))
+          (.setTreeFilter walk (AndTreeFilter/create (PathFilter/create (pathname node)) TreeFilter/ANY_DIFF)))
+        (.markStart walk (.parseCommit walk head-id))
+        (doall (map #(GitChangeSet. repo (.getId %) (.getFullMessage %)) (iterator-seq (.iterator walk))))
+        (finally (.dispose walk))))))
 
 (deftype GitFile [repo parent object-id name]
   VFile
@@ -59,18 +61,21 @@
   (children [this]
     (if (nil? object-id)
       []
-      (let [walk (doto (TreeWalk. repo)
-                   (.addTree object-id)
-                   (.setRecursive false))]
-        ((fn [acc]
-           (if (.next walk)
-             (let [child-id (.getObjectId walk 0)
-                   child-name (.getNameString walk)]
-               (recur (conj acc
-                            (if (.isSubtree walk)
-                              (GitDirectory. repo this child-id child-name)
-                              (GitFile. repo this child-id child-name)))))
-             acc)) []))))
+      (let [walk (TreeWalk. repo)]
+        (try
+          (doto walk
+            (.addTree object-id)
+            (.setRecursive false))
+          ((fn [acc]
+             (if (.next walk)
+               (let [child-id (.getObjectId walk 0)
+                     child-name (.getNameString walk)]
+                 (recur (conj acc
+                              (if (.isSubtree walk)
+                                (GitDirectory. repo this child-id child-name)
+                                (GitFile. repo this child-id child-name)))))
+               acc)) [])
+          (finally (.release walk))))))
   (child [this name]
     (first (drop-while #(not= (.name %) name) (children this))))
   (change-sets [this] (git-change-sets this repo object-id)))
@@ -81,10 +86,14 @@
   (root [this]
     (let [repo (.getRepository git)
           head-id (.resolve repo Constants/HEAD)
-          root-id (if head-id (-> (RevWalk. repo)
-                                  (.parseCommit head-id)
-                                  (.getTree)))]
-      (GitDirectory. repo nil root-id nil))))
+          walk (RevWalk. repo)]
+      (try
+        (GitDirectory. repo
+                       nil
+                       (if head-id
+                         (-> walk (.parseCommit head-id) (.getTree)))
+                       nil)
+        (finally (.dispose walk))))))
 
 (defn git-store [dir &{:keys [init] :or {init false}}]
   (GitStore.
