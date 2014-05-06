@@ -4,7 +4,8 @@
            [org.eclipse.jgit.lib Constants]
            [org.eclipse.jgit.revwalk RevWalk]
            [org.eclipse.jgit.treewalk TreeWalk]
-           [org.eclipse.jgit.treewalk.filter TreeFilter PathFilter AndTreeFilter]))
+           [org.eclipse.jgit.treewalk.filter TreeFilter PathFilter AndTreeFilter]
+           [java.util Date]))
 
 (defprotocol VFileStore
   (close [this])
@@ -21,23 +22,27 @@
 
 (defprotocol VChangeSet
   (revision [this])
-  (message [this]))
+  (message [this])
+  (commit-time [this]))
 
-(deftype GitChangeSet [repo object-id message]
+(deftype GitChangeSet [repo object-id message commit-time]
   VChangeSet
   (revision [this] (.name object-id))
-  (message[this] message))
+  (message [this] message)
+  (commit-time [this] commit-time))
 
 (defn- git-change-sets [node repo object-id]
   (if (nil? object-id)
     []
-    (let [head-id (.resolve repo Constants/HEAD)
+    (let [start-id (.resolve repo Constants/HEAD)
           walk (RevWalk. repo)]
       (try
         (if-not (nil? (parent node))
-          (.setTreeFilter walk (AndTreeFilter/create (PathFilter/create (pathname node)) TreeFilter/ANY_DIFF)))
-        (.markStart walk (.parseCommit walk head-id))
-        (doall (map #(GitChangeSet. repo (.getId %) (.getFullMessage %)) (iterator-seq (.iterator walk))))
+          (.setTreeFilter walk (AndTreeFilter/create
+                                (PathFilter/create (pathname node))
+                                TreeFilter/ANY_DIFF)))
+        (.markStart walk (.parseCommit walk start-id))
+        (doall (map #(GitChangeSet. repo (.getId %) (.getFullMessage %) (Date. (* (.getCommitTime %) 1000))) (iterator-seq (.iterator walk))))
         (finally (.dispose walk))))))
 
 (deftype GitFile [repo parent object-id name]

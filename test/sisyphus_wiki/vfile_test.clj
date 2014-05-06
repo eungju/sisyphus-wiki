@@ -3,6 +3,7 @@
         clojure.java.io)
   (:require [sisyphus-wiki.vfile :refer :all])
   (:import [java.io File]
+           [java.util Date]
            [org.eclipse.jgit.errors RepositoryNotFoundException]
            [sisyphus_wiki.vfile GitStore]))
 
@@ -115,4 +116,9 @@
       (git-create-file "file2" "body2" "second.")
       (git-modify-file "file1" "body changed." "third."))
     (map message (change-sets (child (root dut) "file1"))) => ["third.", "first."])
+
+  (fact "A change set has a commit time."
+    (git-create-file git "file1" "body1" "first.")
+    (.getTime (commit-time (first (change-sets (root dut)))))
+    => (roughly (.getTime (Date.)) 1000))
 )
