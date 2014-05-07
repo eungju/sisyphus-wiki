@@ -23,13 +23,16 @@
 (defprotocol VChangeSet
   (revision [this])
   (message [this])
-  (commit-time [this]))
+  (commit-time [this])
+  (committer [this]))
 
-(deftype GitChangeSet [repo object-id message commit-time]
+(deftype GitChangeSet [repo object-id message commit-time committer]
   VChangeSet
   (revision [this] (.name object-id))
   (message [this] message)
-  (commit-time [this] commit-time))
+  (commit-time [this] commit-time)
+  (committer [this] {:name (.getName committer)
+                     :email (.getEmailAddress committer)}))
 
 (defn- git-change-sets [node repo object-id]
   (if (nil? object-id)
@@ -42,7 +45,7 @@
                                 (PathFilter/create (pathname node))
                                 TreeFilter/ANY_DIFF)))
         (.markStart walk (.parseCommit walk start-id))
-        (doall (map #(GitChangeSet. repo (.getId %) (.getFullMessage %) (Date. (* (.getCommitTime %) 1000))) (iterator-seq (.iterator walk))))
+        (doall (map #(GitChangeSet. repo (.getId %) (.getFullMessage %) (Date. (* (.getCommitTime %) 1000)) (.getCommitterIdent %)) (iterator-seq (.iterator walk))))
         (finally (.dispose walk))))))
 
 (deftype GitFile [repo parent object-id name]

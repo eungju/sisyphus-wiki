@@ -46,10 +46,14 @@
   (with-open [w (writer f)]
     (.write w content)))
 
+(def default-committer {:name "John Doe" :email "john@doe.com"})
+
 (defn- git-commit [git pattern message]
   (-> git (.add) (.addFilepattern pattern) (.call))
-  (-> git (.commit) (.setMessage message) (.call)))
-
+  (-> git (.commit)
+      (.setMessage message)
+      (.setCommitter (:name default-committer) (:email default-committer))
+      (.call)))
 
 (defn- git-create-file [git path body message]
   (let [target-file (file (-> git (.getRepository) (.getWorkTree)) path)]
@@ -117,8 +121,9 @@
       (git-modify-file "file1" "body changed." "third."))
     (map message (change-sets (child (root dut) "file1"))) => ["third.", "first."])
 
-  (fact "A change set has a commit time."
+  (fact "A change set has a message, a commit time and a committer."
     (git-create-file git "file1" "body1" "first.")
-    (.getTime (commit-time (first (change-sets (root dut)))))
-    => (roughly (.getTime (Date.)) 1000))
+    (let [result (first (change-sets (root dut)))]
+      (.getTime (commit-time result)) => (roughly (.getTime (Date.)) 1000)
+      (committer result) => default-committer))
 )
