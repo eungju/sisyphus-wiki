@@ -128,6 +128,12 @@
       (git-modify-file "file1" "body changed." "third."))
     (map message (changesets (root dut) :limit 2)) => ["third." "second."])
 
+  (fact "Fetch changesets which starts with specified revision."
+    (doto git
+      (git-create-file "file1" "body1" "first.")
+      (git-create-file "file2" "body2" "second.")
+      (git-modify-file "file1" "body changed." "third."))
+    (map message (changesets (root dut) :start (revision (second (changesets (root dut)))))) => ["second." "first."])
 
   (fact "A change set has a message, a commit time and a committer."
     (git-create-file git "file1" "body1" "first.")

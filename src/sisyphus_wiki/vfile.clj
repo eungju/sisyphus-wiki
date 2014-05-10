@@ -91,12 +91,12 @@
 (derive GitFile ::git-file)
 (derive GitDirectory ::git-file)
 
-(defmethod changesets ::git-file [node &{:keys [limit] :or {limit nil}}]
+(defmethod changesets ::git-file [node &{:keys [limit start] :or {limit nil start Constants/HEAD}}]
   (let [repo (.repo node)
         object-id (.object-id node)]
     (if (nil? object-id)
       []
-      (let [start-id (.resolve repo Constants/HEAD)
+      (let [start-id (.resolve repo start)
             walk (RevWalk. repo)]
         (try
           (if-not (nil? (parent node))
