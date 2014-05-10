@@ -80,7 +80,7 @@
       (pathname root-dir) => ""
       (children root-dir) => []
       (child root-dir "not-exist") => nil
-      (empty? (change-sets (root dut))) => true))
+      (empty? (changesets (root dut))) => true))
 
   (fact "A directory can contain regular files."
     (dorun (map #(.createNewFile (file dir %)) ["file1", "file2"]))
@@ -112,26 +112,26 @@
     (doto git
       (git-create-file "file1" "body1" "first.")
       (git-create-file "file2" "body2" "second."))
-    (map message (change-sets (root dut))) => ["second.", "first."])
+    (map message (changesets (root dut))) => ["second.", "first."])
 
   (fact "Change sets of a regular file contains all changes of the file."
     (doto git
       (git-create-file "file1" "body1" "first.")
       (git-create-file "file2" "body2" "second.")
       (git-modify-file "file1" "body changed." "third."))
-    (map message (change-sets (child (root dut) "file1"))) => ["third." "first."])
+    (map message (changesets (child (root dut) "file1"))) => ["third." "first."])
 
   (fact "Fetch limited number of change sets of a file."
     (doto git
       (git-create-file "file1" "body1" "first.")
       (git-create-file "file2" "body2" "second.")
       (git-modify-file "file1" "body changed." "third."))
-    (map message (change-sets (root dut) :limit 2)) => ["third." "second."])
+    (map message (changesets (root dut) :limit 2)) => ["third." "second."])
 
 
   (fact "A change set has a message, a commit time and a committer."
     (git-create-file git "file1" "body1" "first.")
-    (let [result (first (change-sets (root dut)))]
+    (let [result (first (changesets (root dut)))]
       (.getTime (commit-time result)) => (roughly (.getTime (Date.)) 1000)
       (committer result) => default-committer))
 )

@@ -86,11 +86,12 @@
                        nil)
         (finally (.dispose walk))))))
 
-(defmulti change-sets (fn [node & _] (class node)))
+(defmulti changesets (fn [node & _] (class node)))
 
 (derive GitFile ::git-file)
 (derive GitDirectory ::git-file)
-(defmethod change-sets ::git-file [node &{:keys [limit] :or {limit nil}}]
+
+(defmethod changesets ::git-file [node &{:keys [limit] :or {limit nil}}]
   (let [repo (.repo node)
         object-id (.object-id node)]
     (if (nil? object-id)
