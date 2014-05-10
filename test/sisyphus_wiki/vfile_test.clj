@@ -119,7 +119,15 @@
       (git-create-file "file1" "body1" "first.")
       (git-create-file "file2" "body2" "second.")
       (git-modify-file "file1" "body changed." "third."))
-    (map message (change-sets (child (root dut) "file1"))) => ["third.", "first."])
+    (map message (change-sets (child (root dut) "file1"))) => ["third." "first."])
+
+  (fact "Fetch limited number of change sets of a file."
+    (doto git
+      (git-create-file "file1" "body1" "first.")
+      (git-create-file "file2" "body2" "second.")
+      (git-modify-file "file1" "body changed." "third."))
+    (map message (change-sets (root dut) :limit 2)) => ["third." "second."])
+
 
   (fact "A change set has a message, a commit time and a committer."
     (git-create-file git "file1" "body1" "first.")

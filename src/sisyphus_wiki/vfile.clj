@@ -17,8 +17,7 @@
   (pathname [this])
   (directory? [this])
   (children [this])
-  (child [this name])
-  (change-sets [this]))
+  (child [this name]))
 
 (defprotocol VChangeSet
   (revision [this])
@@ -34,20 +33,6 @@
   (committer [this] {:name (.getName committer)
                      :email (.getEmailAddress committer)}))
 
-(defn- git-change-sets [node repo object-id]
-  (if (nil? object-id)
-    []
-    (let [start-id (.resolve repo Constants/HEAD)
-          walk (RevWalk. repo)]
-      (try
-        (if-not (nil? (parent node))
-          (.setTreeFilter walk (AndTreeFilter/create
-                                (PathFilter/create (pathname node))
-                                TreeFilter/ANY_DIFF)))
-        (.markStart walk (.parseCommit walk start-id))
-        (doall (map #(GitChangeSet. repo (.getId %) (.getFullMessage %) (Date. (* (.getCommitTime %) 1000)) (.getCommitterIdent %)) (iterator-seq (.iterator walk))))
-        (finally (.dispose walk))))))
-
 (deftype GitFile [repo parent object-id name]
   VFile
   (parent [this] parent)
@@ -55,8 +40,7 @@
   (pathname [this] (if (nil? (basename parent))
                      name
                      (str (pathname parent) "/" name)))
-  (directory? [this] false)
-  (change-sets [this] (git-change-sets this repo object-id)))
+  (directory? [this] false))
 
 (deftype GitDirectory [repo parent object-id name]
   VFile
@@ -86,8 +70,7 @@
                acc)) [])
           (finally (.release walk))))))
   (child [this name]
-    (first (drop-while #(not= (.name %) name) (children this))))
-  (change-sets [this] (git-change-sets this repo object-id)))
+    (first (drop-while #(not= (.name %) name) (children this)))))
 
 (deftype GitStore [repo git]
   VFileStore
@@ -102,6 +85,28 @@
                          (-> walk (.parseCommit head-id) (.getTree)))
                        nil)
         (finally (.dispose walk))))))
+
+(defmulti change-sets (fn [node & _] (class node)))
+
+(derive GitFile ::git-file)
+(derive GitDirectory ::git-file)
+(defmethod change-sets ::git-file [node &{:keys [limit] :or {limit nil}}]
+  (let [repo (.repo node)
+        object-id (.object-id node)]
+    (if (nil? object-id)
+      []
+      (let [start-id (.resolve repo Constants/HEAD)
+            walk (RevWalk. repo)]
+        (try
+          (if-not (nil? (parent node))
+            (.setTreeFilter walk (AndTreeFilter/create
+                                  (PathFilter/create (pathname node))
+                                  TreeFilter/ANY_DIFF)))
+          (.markStart walk (.parseCommit walk start-id))
+          (let [i (iterator-seq (.iterator walk))]
+            (doall (map #(GitChangeSet. repo (.getId %) (.getFullMessage %) (Date. (* (.getCommitTime %) 1000)) (.getCommitterIdent %))
+                        (if (nil? limit) i (take limit i)))))
+          (finally (.dispose walk)))))))
 
 (defn git-store [dir &{:keys [init] :or {init false}}]
   (let [git (if (and init
