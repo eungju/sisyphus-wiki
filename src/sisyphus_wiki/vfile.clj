@@ -19,14 +19,14 @@
   (children [this])
   (child [this name]))
 
-(defprotocol VChangeSet
+(defprotocol VChangeset
   (revision [this])
   (message [this])
   (commit-time [this])
   (committer [this]))
 
-(deftype GitChangeSet [repo object-id message commit-time committer]
-  VChangeSet
+(deftype GitChangeset [repo object-id message commit-time committer]
+  VChangeset
   (revision [this] (.name object-id))
   (message [this] message)
   (commit-time [this] commit-time)
@@ -105,7 +105,7 @@
                                   TreeFilter/ANY_DIFF)))
           (.markStart walk (.parseCommit walk start-id))
           (let [i (iterator-seq (.iterator walk))]
-            (doall (map #(GitChangeSet. repo (.getId %) (.getFullMessage %) (Date. (* (.getCommitTime %) 1000)) (.getCommitterIdent %))
+            (doall (map #(GitChangeset. repo (.getId %) (.getFullMessage %) (Date. (* (.getCommitTime %) 1000)) (.getCommitterIdent %))
                         (if (nil? limit) i (take limit i)))))
           (finally (.dispose walk)))))))
 
