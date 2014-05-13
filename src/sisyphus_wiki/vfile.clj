@@ -1,5 +1,4 @@
 (ns sisyphus-wiki.vfile
-  (:use clojure.java.io)
   (:import [org.eclipse.jgit.api Git]
            [org.eclipse.jgit.lib Constants]
            [org.eclipse.jgit.revwalk RevWalk]
@@ -25,15 +24,15 @@
   (commit-time [this])
   (committer [this]))
 
-(deftype GitChangeset [repo object-id message commit-time committer]
+(deftype GitChangeset [repo oid message commit-time committer]
   VChangeset
-  (revision [this] (.name object-id))
+  (revision [this] (.name oid))
   (message [this] message)
   (commit-time [this] commit-time)
   (committer [this] {:name (.getName committer)
                      :email (.getEmailAddress committer)}))
 
-(deftype GitFile [repo parent object-id name]
+(deftype GitFile [repo oid name parent]
   VFile
   (parent [this] parent)
   (basename [this] name)
@@ -42,7 +41,7 @@
                      (str (pathname parent) "/" name)))
   (directory? [this] false))
 
-(deftype GitDirectory [repo parent object-id name]
+(deftype GitDirectory [repo oid name parent]
   VFile
   (parent [this] parent)
   (basename [this] name)
@@ -52,12 +51,12 @@
                     true (str (pathname parent) "/" name)))
   (directory? [this] true)
   (children [this]
-    (if (nil? object-id)
+    (if (nil? oid)
       []
       (let [walk (TreeWalk. repo)]
         (try
           (doto walk
-            (.addTree object-id)
+            (.addTree oid)
             (.setRecursive false))
           ((fn [acc]
              (if (.next walk)
@@ -65,8 +64,8 @@
                      child-name (.getNameString walk)]
                  (recur (conj acc
                               (if (.isSubtree walk)
-                                (GitDirectory. repo this child-id child-name)
-                                (GitFile. repo this child-id child-name)))))
+                                (GitDirectory. repo child-id child-name this)
+                                (GitFile. repo child-id child-name this)))))
                acc)) [])
           (finally (.release walk))))))
   (child [this name]
@@ -80,9 +79,9 @@
           walk (RevWalk. repo)]
       (try
         (GitDirectory. repo
-                       nil
                        (if head-id
                          (-> walk (.parseCommit head-id) (.getTree)))
+                       nil
                        nil)
         (finally (.dispose walk))))))
 
@@ -91,21 +90,26 @@
 (derive GitFile ::git-file)
 (derive GitDirectory ::git-file)
 
+(defn- git-commit-to-vchangeset [repo c]
+  (GitChangeset. repo
+                 (.getId c)
+                 (.getFullMessage c)
+                 (Date. (* (.getCommitTime c) 1000))
+                 (.getCommitterIdent c)))
+
 (defmethod changesets ::git-file [node &{:keys [limit start] :or {limit nil start Constants/HEAD}}]
-  (let [repo (.repo node)
-        object-id (.object-id node)]
-    (if (nil? object-id)
+  (let [repo (.repo node) oid (.oid node)]
+    (if (nil? oid)
       []
-      (let [start-id (.resolve repo start)
-            walk (RevWalk. repo)]
+      (let [walk (RevWalk. repo)]
         (try
           (if-not (nil? (parent node))
             (.setTreeFilter walk (AndTreeFilter/create
                                   (PathFilter/create (pathname node))
                                   TreeFilter/ANY_DIFF)))
-          (.markStart walk (.parseCommit walk start-id))
+          (.markStart walk (.parseCommit walk (.resolve repo start)))
           (let [i (iterator-seq (.iterator walk))]
-            (doall (map #(GitChangeset. repo (.getId %) (.getFullMessage %) (Date. (* (.getCommitTime %) 1000)) (.getCommitterIdent %))
+            (doall (map #(git-commit-to-vchangeset repo %)
                         (if (nil? limit) i (take limit i)))))
           (finally (.dispose walk)))))))
 
